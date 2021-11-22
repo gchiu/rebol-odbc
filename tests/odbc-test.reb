@@ -71,6 +71,7 @@ tables: compose [
     ; INTEGER! arbitrary precision:
     ; https://forum.rebol.info/t/planning-ahead-for-bignum-arithmetic/623
     ;
+    ; Firebird doesn't support unsigned integers
 ;    bigint_u "BIGINT UNSIGNED" [0 10 20 30 9223372036854775807]
     bigint_u "BIGINT" [0 10 20 30 9223372036854775807]
 
@@ -78,6 +79,7 @@ tables: compose [
 ;    double "DOUBLE" [-3.4 -1.2 0.0 5.6 7.8]
     double "DOUBLE PRECISION" [-3.4 -1.2 0.0 5.6 7.8]
     float "FLOAT(20)" [-3.4 -1.2 0.0 5.6 7.8]
+    ; got an error on this numeric() - to investigate
 ;    numeric "NUMERIC(20,2)" [-3.4 -1.2 0.0 5.6 7.8]
     decimal "DECIMAL(3,2)" [-3.4 -1.2 0.0 5.6 7.8]
 
@@ -101,6 +103,7 @@ tables: compose [
     varchar "VARCHAR(10)" ["" "abc" "defgh" "jklmnopqrs"]
     ((if not is-mysql '[
 ;        longvarchar "LONGVARCHAR(255)" ["" "abc" "defgh" "jklmnopqrs"]
+        ; firebird doesn' have this legacy type
         longvarchar "VARCHAR(255)" ["" "abc" "defgh" "jklmnopqrs"]
     ]))
 
