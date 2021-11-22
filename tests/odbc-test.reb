@@ -58,9 +58,11 @@ tables: compose [
     ]))
 
     smallint_s "SMALLINT" [-32768 -10 0 10 32767]
-    smallint_u "SMALLINT UNSIGNED" [0 10 20 30 65535]
+;    smallint_u "SMALLINT UNSIGNED" [0 10 20 30 65535]
+    smallint_u "SMALLINT" [0 10 20 30 65535]
     integer_s "INT" [-2147483648 -10 0 10 2147483647]
-    integer_u "INT UNSIGNED" [0 10 20 30 4294967295]
+;    integer_u "INT UNSIGNED" [0 10 20 30 4294967295]
+    integer_u "INT" [0 10 20 30 4294967295]
     bigint_s "BIGINT" [-9223372036854775808 -10 0 10 9223372036854775807]
     ;
     ; Note: though BIGINT unsigned storage in ODBC can store the full range of
@@ -69,12 +71,14 @@ tables: compose [
     ; INTEGER! arbitrary precision:
     ; https://forum.rebol.info/t/planning-ahead-for-bignum-arithmetic/623
     ;
-    bigint_u "BIGINT UNSIGNED" [0 10 20 30 9223372036854775807]
+;    bigint_u "BIGINT UNSIGNED" [0 10 20 30 9223372036854775807]
+    bigint_u "BIGINT" [0 10 20 30 9223372036854775807]
 
     real "REAL" [-3.4 -1.2 0.0 5.6 7.8]
-    double "DOUBLE" [-3.4 -1.2 0.0 5.6 7.8]
+;    double "DOUBLE" [-3.4 -1.2 0.0 5.6 7.8]
+    double "DOUBLE PRECISION" [-3.4 -1.2 0.0 5.6 7.8]
     float "FLOAT(20)" [-3.4 -1.2 0.0 5.6 7.8]
-    numeric "NUMERIC(20,2)" [-3.4 -1.2 0.0 5.6 7.8]
+;    numeric "NUMERIC(20,2)" [-3.4 -1.2 0.0 5.6 7.8]
     decimal "DECIMAL(3,2)" [-3.4 -1.2 0.0 5.6 7.8]
 
     date "DATE" [12-Dec-2012/0:00+0:00 21-Apr-1975/0:00+0:00]
