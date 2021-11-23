@@ -11,26 +11,33 @@ Rebol [
         this shows some coverage of fundamental ODBC operation; since it
         just passes through the query strings as-is, really this is most of
         what an interface has to handle.
+
+        Use: r3 test-odbc.reb dsn --firebird --show-sql
     }
     Notes: {
-        * Some databases (notably MySQL and SQLite) allow backticks when
-          naming tables or columns, and use double-quotes to annotate string
-          values.  This is not standard SQL, which conflates double quotes for
-          string literals as the means for avoiding conflicts with reserved
-          column names:
+      * This test supports Firebird even though it is non-standard, because
+        prominent user @gchiu has used it for decades, including in the
+        Synapse EHR product.  Here is a summary of its quirky mappings; we
+        assume support for versions >= 3.0 only:
 
-          https://stackoverflow.com/q/5952677
+        https://firebirdsql.org/manual/migration-mssql-data-types.html
 
-          But because MySQL will error if you put column or table names in
-          double quotes--and databases like Firebird will error if you use
-          backticks--there's no common way to use a reserved word as a column
-          name.  That means not just columns with names like `INT`, but even
-          useful-sounding names like `VALUE`.
+      * Some databases (notably MySQL and SQLite) allow backticks when
+        naming tables or columns, and use double-quotes to annotate string
+        values.  This is not standard SQL, which conflates double quotes for
+        string literals as the means for avoiding conflicts with reserved
+        column names:
 
-          This file sticks to a lowest-common denominator of naming without
-          quotes, rather than do conditional delimiting based on ODBC source.
+        https://stackoverflow.com/q/5952677
 
-          Use: r3 test-odbc.reb dsn --firebird --show-sql
+        But because MySQL will error if you put column or table names in
+        double quotes--and databases like Firebird will error if you use
+        backticks--there's no common way to use a reserved word as a column
+        name.  That means not just columns with names like `INT`, but even
+        useful-sounding names like `VALUE`.
+
+        This file sticks to a lowest-common denominator of naming without
+        quotes, rather than do conditional delimiting based on ODBC source.
     }
 ]
 
@@ -41,46 +48,85 @@ Rebol [
 show-sql?: did find system.script.args "--show-sql"
 
 is-sqlite: did find system.script.args "--sqlite"
-is-mysql: did find system.script.args "--mysql" 
-is-firebird: did find system.script.args "--firebird" 
+is-mysql: did find system.script.args "--mysql"
+is-firebird: did find system.script.args "--firebird"
 
 tables: compose [
     ;
-    ; Firebird added a logic type, but only in v3.0, and called it BOOLEAN
-    ; not BIT (for some reason).  Prior to that it was expected to use `T`
-    ; and `F` as CHAR(1).  It has no such type as TINYINT, either.
-    ; https://firebirdsql.org/manual/migration-mssql-data-types.html
+    ; Note: Although MySQL supports BOOLEAN it is just a synonym for TINYINT(1)
+    ; so it would give back 0 and 1, not false and true.  (Firebird has a
+    ; distinct boolean type.)
+    ;
+    ((if is-firebird '[
+        boolean "BOOLEAN" [#[false] #[true]]
+    ]))
+
+    ; The BIT type can be parameterized with how many bits to store, and can
+    ; be more compact than a BOOLEAN.
+    ;
+    ; !!! Should this map to BITSET, if it can have a size, vs. LOGIC! ?
     ;
     ((if not is-firebird '[
         bit "BIT" [#[false] #[true]]
+    ]))
+
+    ((if not is-firebird '[  ; Firebird does not have TINYINT
         tinyint_s "TINYINT" [-128 -10 0 10 127]
         tinyint_u "TINYINT UNSIGNED" [0 10 20 30 255]
     ]))
 
     smallint_s "SMALLINT" [-32768 -10 0 10 32767]
-;    smallint_u "SMALLINT UNSIGNED" [0 10 20 30 65535]
-    smallint_u "SMALLINT" [0 10 20 30 65535]
     integer_s "INT" [-2147483648 -10 0 10 2147483647]
-;    integer_u "INT UNSIGNED" [0 10 20 30 4294967295]
-    integer_u "INT" [0 10 20 30 4294967295]
     bigint_s "BIGINT" [-9223372036854775808 -10 0 10 9223372036854775807]
-    ;
-    ; Note: though BIGINT unsigned storage in ODBC can store the full range of
-    ; unsigned 64-bit values, Rebol's INTEGER! is always signed.  Hence it
-    ; is limited to the signed range.  The plan to address this is to make
-    ; INTEGER! arbitrary precision:
-    ; https://forum.rebol.info/t/planning-ahead-for-bignum-arithmetic/623
-    ;
-    ; Firebird doesn't support unsigned integers
-;    bigint_u "BIGINT UNSIGNED" [0 10 20 30 9223372036854775807]
-    bigint_u "BIGINT" [0 10 20 30 9223372036854775807]
 
-    real "REAL" [-3.4 -1.2 0.0 5.6 7.8]
-;    double "DOUBLE" [-3.4 -1.2 0.0 5.6 7.8]
-    double "DOUBLE PRECISION" [-3.4 -1.2 0.0 5.6 7.8]
-    float "FLOAT(20)" [-3.4 -1.2 0.0 5.6 7.8]
-    ; firebird max of 18 on numeric    
-;    numeric "NUMERIC(20,2)" [-3.4 -1.2 0.0 5.6 7.8]
+    ((if not is-firebird '[  ; Firebird lacks unsigned types
+        smallint_u "SMALLINT UNSIGNED" [0 10 20 30 65535]
+        integer_u "INT UNSIGNED" [0 10 20 30 4294967295]
+
+        ; Note: though BIGINT unsigned storage in ODBC stores the full range of
+        ; unsigned 64-bit values, Rebol's INTEGER! is always signed.  Hence it
+        ; is limited to the signed range.  The plan to address this is to make
+        ; INTEGER! arbitrary precision:
+        ;
+        ; https://forum.rebol.info/t/planning-ahead-for-bignum-arithmetic/623
+        ;
+        bigint_u "BIGINT UNSIGNED" [0 10 20 30 9223372036854775807]
+    ]))
+
+    ((if is-firebird '[
+        ;
+        ; REAL and FLOAT(20) get these answers in Firebird back if you were
+        ; to put in the rounded values.  It's not that interesting as to why at
+        ; this particular time.
+        ;
+        real "REAL" [
+            -3.4000000953674316
+            -1.2000000476837158
+            0.0
+            5.599999904632568
+            7.800000190734863
+        ]
+        float "FLOAT(20)" [
+            -3.4000000953674316
+            -1.2000000476837158
+            0.0
+            5.599999904632568
+            7.800000190734863
+        ]
+    ] else '[
+        real "REAL" [-3.4 -1.2 0.0 5.6 7.8]
+        float "FLOAT(20)" [-3.4 -1.2 0.0 5.6 7.8]
+    ]))
+
+    ((if is-firebird '[  ; throws in word "precision"
+        double "DOUBLE PRECISION" [-3.4 -1.2 0.0 5.6 7.8]
+    ] else '[
+        double "DOUBLE" [-3.4 -1.2 0.0 5.6 7.8]
+    ]))
+
+    ; Firebird has a maximum of 18 for NUMERIC, so NUMERIC(18,2) will work but
+    ; NUMERIC(20,2) will not.
+    ;
     numeric "NUMERIC(18,2)" [-3.4 -1.2 0.0 5.6 7.8]
     decimal "DECIMAL(3,2)" [-3.4 -1.2 0.0 5.6 7.8]
 
@@ -102,16 +148,17 @@ tables: compose [
 
     char "CHAR(3)" ["abc" "def" "ghi"]
     varchar "VARCHAR(10)" ["" "abc" "defgh" "jklmnopqrs"]
-    ((if not is-mysql '[
-;        longvarchar "LONGVARCHAR(255)" ["" "abc" "defgh" "jklmnopqrs"]
-        ; firebird doesn' have this legacy type
-        longvarchar "VARCHAR(255)" ["" "abc" "defgh" "jklmnopqrs"]
+    ((if is-sqlite '[
+        ;
+        ; LONGVARCHAR is considered a "legacy type", and not supported by most
+        ; modern SQLs, but it is in Sqlite.
+        ;
+        longvarchar "LONGVARCHAR(255)" ["" "abc" "defgh" "jklmnopqrs"]
     ]))
 
     ; Firebird lacked NCHAR types and expects you to use the syntax of
-    ; CHAR(x) CHARACTER SET UNICODE_FSS.  This was before 3.0 and so go ahead
-    ; and test it as such.
-    ; https://firebirdsql.org/manual/migration-mssql-data-types.html
+    ; CHAR(x) CHARACTER SET UNICODE_FSS.  3.0 supports NCHAR but not NVARCHAR
+    ; so you still need the weird syntax for VARCHAR, test it for CHAR as well.
     ;
     ((if not is-firebird '[
         nchar "NCHAR(3)" ["abc" "ταБ" "ghi"]
@@ -122,20 +169,40 @@ tables: compose [
             ["" "abc" "ταБЬℓσ" "٩(●̮̮̃•̃)۶"]
     ]))
 
-    binary "BINARY(3)" [#{000000} #{010203} #{FFFFFF}]
-    varbinary "VARBINARY(10)" [#{} #{010203} #{DECAFBADCAFE}]
-    ; validation error as blob not null - doesn't like #{}
-;    blob "BLOB(10)" [#{} #{010203} #{DECAFBADCAFE}]
-    blob "BLOB(10)" [#{010203} #{DECAFBADCAFE}]
+    ; Firebird has no BINARY column types.  But Firebird 4 will pretend you
+    ; said CHAR or VARCHAR if you say BINARY or VARBINARY instead of raising an
+    ; error.  This creates nonsense on the round trip, because the ODBC layer
+    ; will perceive the column as a string.  Don't use BINARY in Firebird ODBC.
+    ;
+    ((if not is-firebird '[
+        binary "BINARY(3)" [#{000000} #{010203} #{FFFFFF}]
+        varbinary "VARBINARY(10)" [#{} #{010203} #{DECAFBADCAFE}]
+    ]))
+
+    ; Firebird appears to conflate empty blobs with nulls in the ODBC driver.
+    ;
+    ((if is-firebird '[
+        blob "BLOB(10)" [#{010203} #{DECAFBADCAFE}]
+    ] else '[
+        blob "BLOB(10)" [#{} #{010203} #{DECAFBADCAFE}]
+    ]))
 ]
+
+mismatches: 0
+total: 0
 
 trap [
     odbc-set-char-encoding 'ucs-2
 
     print ["Opening DSN:" dsn]
 
-    connection: open join odbc:// dsn
-    statement: odbc-statement-of connection ;first connection
+    connection: open (any [is-sqlite, is-firebird] then [
+        join odbc:// dsn  ; no user or password for sqlite or gchiu firebird
+    ] else [
+        join odbc:// reduce [dsn ";UID=test;PWD=test-password"]
+    ])
+
+    statement: odbc-statement-of connection
 
     sql-execute: specialize :odbc-execute [  ; https://forum.rebol.info/t/1234
         statement: statement
@@ -171,10 +238,10 @@ trap [
         ; type.  (It is "val" and not "value" to avoid being a SQL keyword.)
         ;
         ; SQLite auto-increments integer primary keys, and will complain
-        ; if you say you want to increment it.  Firebird is...different:
+        ; if you say you want to increment it.  Firebird is...different, and
+        ; position matters (e.g. must be after INTEGER, not after NOT NULL):
         ; https://stackoverflow.com/a/34555507
         ;
-        ;  generated by default as identity primary key not null
         let auto-increment: case [
             is-sqlite [_]
             is-firebird ["GENERATED BY DEFAULT AS IDENTITY"]
@@ -227,18 +294,27 @@ trap [
         either (sort copy actual) = (sort copy content) [
             print "QUERY MATCHED ORIGINAL DATA"
         ][
+            mismatches: me + 1
             print "QUERY DID NOT MATCH ORIGINAL DATA"
         ]
+
+        total: total + 1
 
         print newline
     ]
 
-    close statement
-    close connection
+; !!! Try not doing the close.
+;
+;    close statement
+;    close connection
 ]
 then (func [e] [
     print ["Test had an error:" mold e]
     quit 1
 ])
 
-quit 0  ; return code is heeded by test caller 
+if mismatches <> 0 [
+    fail [mismatches "out of" total "tests did not match original data"]
+]
+
+quit 0  ; return code is heeded by test caller
